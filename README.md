@@ -104,7 +104,47 @@ roslaunch fast_livo mapping_avia.launch
 rosbag play YOUR_DOWNLOADED.bag
 ```
 
+## 5. Run HERCULES dataset
 
-## 5. License
+### 5.1 Install system dependencies
 
-The source code of this package is released under the [**GPLv2**](http://www.gnu.org/licenses/) license. For commercial use, please contact me at <zhengcr@connect.hku.hk> and Prof. Fu Zhang at <fuzhang@hku.hk> to discuss an alternative license.
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-pip python3-tk wget
+```
+
+### 5.2 Install Miniconda
+
+```bash
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+bash ~/miniconda.sh -b -p ~/miniconda3
+rm ~/miniconda.sh
+~/miniconda3/bin/conda init bash
+source ~/.bashrc
+```
+
+### 5.3 Create the robotdataprocess environment
+
+```bash
+conda deactivate
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+conda create -n robotdataprocess python=3.8 -y
+unset PYTHONPATH
+conda activate robotdataprocess
+```
+
+### 5.4 Install the robotdataprocess library
+
+```bash
+cd dependencies/robotdataprocess
+pip install .
+pip install rospkg
+```
+
+
+### 5.5 Run the experiment
+
+```bash
+tmuxp load research/tmux/hercules.yaml
+```

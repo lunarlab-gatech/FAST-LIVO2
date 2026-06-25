@@ -1,0 +1,37 @@
+session_name: fast_livo2
+
+environment:
+  ROS_DIR: '/opt/ros/noetic'
+  ROS_WS: '/home/dbutterfield3/fast_livo2_ws'
+  DATASET_NUM: 'V2.4.C'
+  ROBOT_NAME: 'Husky1'
+  ROBOT_TYPE: 'Husky'
+options:
+  default-command: /bin/bash
+
+windows:
+- window_name: main
+  layout: even-horizontal
+  panes:
+  - shell_command:
+    - conda activate robotdataprocess
+    - unset PYTHONPATH
+    - source $ROS_DIR/setup.bash
+    - cd $ROS_WS/src/FAST-LIVO2
+    - python research/rosbag_play.py --dataset_num ${DATASET_NUM} --robot_name ${ROBOT_NAME}
+  - shell_command:
+    - source $ROS_DIR/setup.bash
+    - source $ROS_WS/devel/setup.bash
+    - sleep 3
+    - roslaunch fast_livo mapping_hercules.launch dataset_num:=${DATASET_NUM} robot_type:=${ROBOT_TYPE}
+
+- window_name: roscore
+  panes:
+  - shell_command:
+    - source $ROS_DIR/setup.bash
+    - roscore
+
+- window_name: kill
+  layout: tiled
+  panes:
+  - tmux kill-session -t fast_livo2_
