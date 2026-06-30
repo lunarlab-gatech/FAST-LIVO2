@@ -166,7 +166,7 @@ public:
   int lidar_type, point_filter_num, N_SCANS;
   
   double blind, blind_sqr;
-  bool feature_enabled, given_offset_time;
+  bool feature_enabled, given_offset_time, simulated_velodyne_lidar;
   ros::Publisher pub_full, pub_surf, pub_corn;
 
 private:

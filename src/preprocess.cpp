@@ -361,7 +361,7 @@ void Preprocess::velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg)
   float yaw_last[MAX_LINE_NUM] = {0.0};  // yaw of last scan point
   float time_last[MAX_LINE_NUM] = {0.0}; // last offset time
 
-  if (pl_orig.points[plsize - 1].time > 0) { given_offset_time = true; }
+  if (simulated_velodyne_lidar || pl_orig.points[plsize - 1].time > 0) { given_offset_time = true; }
   else
   {
     given_offset_time = false;
