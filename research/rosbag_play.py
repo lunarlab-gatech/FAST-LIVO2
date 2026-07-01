@@ -48,6 +48,8 @@ def main():
     lidar_data.make_dense()
 
     # Shift GT data to start at Identity to be roughly clsoe to odometry output
+    if "Drone" in robot_name:
+        gt_odom_data.to_coordinate_frame(CoordinateFrame.FLU)
     gt_odom_data.shift_to_start_at_identity()
 
     # Crop the data

@@ -24,7 +24,7 @@ time_offset:
 
 preprocess:
   point_filter_num: 1
-  filter_size_surf: 0.1
+  filter_size_surf: 0.2
   lidar_type: 2
   scan_line: 16
   blind: 0.8
@@ -67,7 +67,7 @@ local_map:
 
 uav:
   imu_rate_odom: true
-  gravity_align_en: false # See if we should undo this
+  gravity_align_en: false
 
 publish:
   dense_map_en: false # Can enable
