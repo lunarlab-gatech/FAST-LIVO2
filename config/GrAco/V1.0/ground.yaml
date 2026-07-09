@@ -1,0 +1,93 @@
+common:
+  img_topic: "/camera_left/image_raw"
+  lid_topic: "/velodyne/points"
+  imu_topic: "/gnss/imu"
+  img_en: 0
+  lidar_en: 1
+  ros_driver_bug_fix: false
+
+extrin_calib:
+  extrinsic_T: [-0.01193, -0.01973, 0.12261]
+  extrinsic_R: [0.99992, 0.01019, 0.00796, -0.01025, 0.99992, 0.00764, -0.00788, -0.00772, 0.99994]
+  Rcl: [0.99976, 0.02148, 0.00396,
+         0.00401, -0.00225, -0.99999,
+         -0.02147, 0.99977, -0.00234]
+  Pcl: [0.11024, -0.05628, -0.04082]
+
+time_offset: 
+  imu_time_offset: 0.0
+  img_time_offset: 0.0
+  exposure_time_init: 0.0 # Note: this is a placeholder since we aren't using camera
+
+preprocess:
+  point_filter_num: 1
+  filter_size_surf: 0.2 # Although default is 0.1, keeping increased size from HERCULES experiments
+  lidar_type: 2
+  scan_line: 16
+  blind: 0.8
+  simulated_velodyne_lidar: false
+
+vio:
+  max_iterations: 5
+  outlier_threshold: 1000 # 78 100 156 #100 200 500 700 infinite
+  img_point_cov: 100 # 100 1000 
+  patch_size: 8
+  patch_pyrimid_level: 4
+  normal_en: true
+  raycast_en: false
+  inverse_composition_en: false
+  exposure_estimate_en: true
+  inv_expo_cov: 0.1
+
+imu: # Same IMU noise values at LIO-SAM (perhaps we should just use FAST-LIVO2 defaults instead)
+  imu_en: true
+  imu_int_frame: 30
+  acc_cov: 1.0028108e-02
+  gyr_cov: 8.3723892e-04  
+
+  # NOTE: Claude believes this parameters are currently unused.
+  b_acc_cov: 5.5367077e-04  
+  b_gyr_cov: 1.5212086e-05 
+
+lio:
+  max_iterations: 5
+  dept_err: 0.02
+  beam_err: 0.05
+  min_eigen_value: 0.0025 # 0.005
+  voxel_size: 0.5
+  max_layer: 2
+  max_points_num: 50
+  layer_init_num: [5, 5, 5, 5, 5]
+
+local_map:  
+  map_sliding_en: false
+  half_map_size: 100
+  sliding_thresh: 8
+
+uav:
+  imu_rate_odom: true
+  gravity_align_en: true
+
+publish:
+  dense_map_en: false # Can enable
+  pub_effect_point_en: true
+  pub_plane_en: false
+  pub_scan_num: 5 # Can drop to 1
+  blind_rgb_points: 0.0
+
+evo:
+  seq_name: "GrAco"
+  pose_output_en: true
+
+pcd_save:
+  pcd_save_en: false
+  type: 0 # 0: World Frame, 1: Body Frame;
+  colmap_output_en: false # need to set interval = -1
+  filter_size_pcd: 0.15
+  interval: -1
+  # how many LiDAR frames saved in each pcd file;
+  # -1 : all frames will be saved in ONE pcd file, may lead to memory crash when having too much frames.
+
+image_save:
+  img_save_en: false
+  interval: 1

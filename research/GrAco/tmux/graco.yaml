@@ -2,10 +2,10 @@ session_name: fast_livo2
 
 environment:
   ROS_DIR: '/opt/ros/noetic'
+  BAG_DIR: '/home/dbutterfield3/data/GrAco_dataset/V1.0/data'
   ROS_WS: '/home/dbutterfield3/fast_livo2_ws'
-  DATASET_NUM: 'V2.4.C'
-  ROBOT_NAME: 'Husky1'
-  ROBOT_TYPE: 'Husky'
+  ROBOT_NAME: 'ground-01'
+  ROBOT_TYPE: 'ground'
 options:
   default-command: /bin/bash
 
@@ -14,16 +14,16 @@ windows:
   layout: even-horizontal
   panes:
   - shell_command:
-    - conda activate robotdataprocess
-    - unset PYTHONPATH
     - source $ROS_DIR/setup.bash
-    - cd $ROS_WS/src/FAST-LIVO2
-    - python research/rosbag_play.py --dataset_num ${DATASET_NUM} --robot_name ${ROBOT_NAME}
+    - source $ROS_WS/devel/setup.bash
+    - cd $BAG_DIR/${ROBOT_NAME}/
+    - sleep 12
+    - rosbag play ${ROBOT_NAME}.bag
   - shell_command:
     - source $ROS_DIR/setup.bash
     - source $ROS_WS/devel/setup.bash
     - sleep 3
-    - roslaunch fast_livo mapping_hercules.launch dataset_num:=${DATASET_NUM} robot_type:=${ROBOT_TYPE}
+    - roslaunch fast_livo mapping_graco.launch robot_type:=${ROBOT_TYPE}
 
 - window_name: roscore
   panes:

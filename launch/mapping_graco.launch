@@ -1,0 +1,17 @@
+<launch>
+<!-- Launch file for GrAco dataset -->
+
+	<arg name="rviz" default="true" />
+	<arg name="robot_type" />
+
+	<rosparam command="load" file="$(find fast_livo)/config/GrAco/V1.0/$(arg robot_type).yaml" />
+
+	<node pkg="fast_livo" type="fastlivo_mapping" name="laserMapping" output="screen">
+		<rosparam file="$(find fast_livo)/config/GrAco/V1.0/$(arg robot_type)_camera_pinhole.yaml" />
+	</node>
+
+	<group if="$(arg rviz)">
+		<node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d $(find fast_livo)/rviz_cfg/graco.rviz" />
+	</group>
+
+</launch>

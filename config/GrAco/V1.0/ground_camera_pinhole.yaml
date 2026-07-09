@@ -1,0 +1,12 @@
+cam_model: Pinhole
+cam_width: 1600
+cam_height: 1100
+scale: 1.0  # Maybe scale down if we actually enable VIO
+cam_fx: 940.862825677534
+cam_fy: 938.554923506332
+cam_cx: 799.1626975233576
+cam_cy: 559.295406893583
+cam_d0: -0.1008504099655989
+cam_d1: 0.08905706623788286
+cam_d2: 0.0007516966627205781
+cam_d3: -0.0011958374307601393
