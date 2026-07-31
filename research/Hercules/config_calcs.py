@@ -30,8 +30,8 @@ def fmt_R_multiline(R, indent=8):
 
 
 def main():
-    sequence = "V2.4.C"
-    robot_name = "Husky1"
+    sequence = "SmallTownSequence"
+    robot_name = "Drone1"
 
     user = getuser()
     settings_path = Path("/home") / user / "data" / "Hercules_datasets" / sequence / "data" / "settings.json"

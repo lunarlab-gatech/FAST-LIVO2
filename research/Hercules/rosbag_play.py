@@ -28,6 +28,9 @@ def main():
     elif dataset_num == "V2.4.F":
         robot_crop_start_times = [Decimal('35.05'), Decimal('34.60'), Decimal('27.45'), Decimal('31.50')]
         robot_crop_end_times = [Decimal('575.55'), Decimal('762.35'), Decimal('898.10'), Decimal('906.85')]
+    elif dataset_num == "SmallTownSequence":
+        robot_crop_start_times = [Decimal('0.0'), Decimal('0.0'), Decimal('0.0'), Decimal('0.0')]
+        robot_crop_end_times = [None, None, None, None]
     else:
         raise ValueError("Crop times not specified for this dataset number.")
     crop_start = robot_crop_start_times[robot_name_to_index[robot_name]]
@@ -44,7 +47,17 @@ def main():
     gt_odom_data = OdometryData.from_txt(input_path / "pose_world_frame.txt", 'camera_init', 'base_link', CoordinateFrame.NED, False)
 
     # Prepare LiDAR data
-    lidar_data.calculate_point_channels(16, -20, 20)
+    if dataset_num == "SmallTownSequence":
+        num_channels = 32
+        v_min_angle = -25
+        v_max_angle = 25
+    elif dataset_num == "V2.4.C" or dataset_num == "V2.3.AP" or dataset_num == "V2.3.AC" or dataset_num == "V2.4.F":
+        num_channels = 16
+        v_min_angle = -20
+        v_max_angle = 20
+    else:
+        raise ValueError("LiDAR point channels not specified for this dataset number.")
+    lidar_data.calculate_point_channels(num_channels, v_min_angle, v_max_angle)
     lidar_data.make_dense()
 
     # Shift GT data to start at Identity to be roughly clsoe to odometry output
