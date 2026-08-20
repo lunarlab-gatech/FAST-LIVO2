@@ -129,7 +129,7 @@ void VoxelOctoTree::init_plane(const std::vector<pointWithVar> &points, VoxelPla
   }
   else
   {
-    plane->is_update_ = true;
+    if (plane->is_plane_) { plane->is_update_ = true; } // demoting an already-published plane is a real change worth republishing
     plane->is_plane_ = false;
   }
 }
@@ -787,47 +787,123 @@ void VoxelMapManager::build_single_residual(pointWithVar &pv, const VoxelOctoTre
 
 void VoxelMapManager::pubVoxelMap()
 {
-  double max_trace = 0.25;
-  double pow_num = 0.2;
-  ros::Rate loop(500);
   float use_alpha = 0.8;
-  visualization_msgs::MarkerArray voxel_plane;
-  voxel_plane.markers.reserve(1000000);
-  std::vector<VoxelPlane> pub_plane_list;
+
+  // TEMPORARILY DISABLED: RViz plane markers are redundant now that Rerun handles plane
+  // visualization, and this block was a full voxel_map_ traversal (GetPlanes(..., true))
+  // plus per-plane marker construction on every call -- a real contributor to the
+  // per-frame cost of pubVoxelMap() while we track down the processing lag. Re-enable by
+  // uncommenting if RViz plane markers are needed again.
+  //
+  // ros::Rate loop(500);
+  // visualization_msgs::MarkerArray voxel_plane;
+  // voxel_plane.markers.reserve(1000000);
+  // std::vector<VoxelPlane> pub_plane_list;
+  // for (auto iter = voxel_map_.begin(); iter != voxel_map_.end(); iter++)
+  // {
+  //   GetPlanes(iter->second, config_setting_.max_layer_, pub_plane_list, true);
+  // }
+  // for (size_t i = 0; i < pub_plane_list.size(); i++)
+  // {
+  //   uint8_t r, g, b;
+  //   PlaneTraceColor(pub_plane_list[i], r, g, b);
+  //   Eigen::Vector3d plane_rgb(r / 256.0, g / 256.0, b / 256.0);
+  //   double alpha;
+  //   if (pub_plane_list[i].is_plane_) { alpha = use_alpha; }
+  //   else { alpha = 0; }
+  //   pubSinglePlane(voxel_plane, "plane", pub_plane_list[i], alpha, plane_rgb);
+  // }
+  // voxel_map_pub_.publish(voxel_plane);
+  // loop.sleep();
+
+  // Rerun: full live snapshot every call -- its per-path "latest wins" semantics need the
+  // complete current set (not just what changed) to drop stale planes correctly.
+  if (!rerun_wrapper_) { rerun_wrapper_ = std::make_unique<RerunWrapper>("fast_livo2"); }
+
+  std::vector<VoxelPlane> rerun_plane_list;
   for (auto iter = voxel_map_.begin(); iter != voxel_map_.end(); iter++)
   {
-    GetUpdatePlane(iter->second, config_setting_.max_layer_, pub_plane_list);
+    GetPlanes(iter->second, config_setting_.max_layer_, rerun_plane_list, false);
   }
-  for (size_t i = 0; i < pub_plane_list.size(); i++)
+
+  std::vector<RerunBox> boxes;
+  boxes.reserve(rerun_plane_list.size());
+  for (const auto &plane : rerun_plane_list)
   {
-    V3D plane_cov = pub_plane_list[i].plane_var_.block<3, 3>(0, 0).diagonal();
-    double trace = plane_cov.sum();
-    if (trace >= max_trace) { trace = max_trace; }
-    trace = trace * (1.0 / max_trace);
-    trace = pow(trace, pow_num);
     uint8_t r, g, b;
-    mapJet(trace, 0, 1, r, g, b);
-    Eigen::Vector3d plane_rgb(r / 256.0, g / 256.0, b / 256.0);
-    double alpha;
-    if (pub_plane_list[i].is_plane_) { alpha = use_alpha; }
-    else { alpha = 0; }
-    pubSinglePlane(voxel_plane, "plane", pub_plane_list[i], alpha, plane_rgb);
+    PlaneNormalColor(plane, r, g, b);
+
+    geometry_msgs::Quaternion q;
+    CalcVectQuation(plane.x_normal_, plane.y_normal_, plane.normal_, q);
+
+    RerunBox box;
+    box.center[0] = plane.center_(0);
+    box.center[1] = plane.center_(1);
+    box.center[2] = plane.center_(2);
+    box.quat_xyzw[0] = q.x;
+    box.quat_xyzw[1] = q.y;
+    box.quat_xyzw[2] = q.z;
+    box.quat_xyzw[3] = q.w;
+    box.half_size[0] = 1.5 * sqrt(plane.max_eigen_value_);
+    box.half_size[1] = 1.5 * sqrt(plane.mid_eigen_value_);
+    box.half_size[2] = sqrt(plane.min_eigen_value_);
+    box.r = r;
+    box.g = g;
+    box.b = b;
+    box.a = static_cast<uint8_t>(use_alpha * 255);
+    boxes.push_back(box);
   }
-  voxel_map_pub_.publish(voxel_plane);
-  loop.sleep();
+
+  rerun_wrapper_->publishBoxes("planes", boxes);
 }
 
-void VoxelMapManager::GetUpdatePlane(const VoxelOctoTree *current_octo, const int pub_max_voxel_layer, std::vector<VoxelPlane> &plane_list)
+void VoxelMapManager::PlaneTraceColor(const VoxelPlane &plane, uint8_t &r, uint8_t &g, uint8_t &b)
+{
+  double max_trace = 0.25;
+  double pow_num = 0.2;
+  V3D plane_cov = plane.plane_var_.block<3, 3>(0, 0).diagonal();
+  double trace = plane_cov.sum();
+  if (trace >= max_trace) { trace = max_trace; }
+  trace = pow(trace * (1.0 / max_trace), pow_num);
+  mapJet(trace, 0, 1, r, g, b);
+}
+
+void VoxelMapManager::PlaneNormalColor(const VoxelPlane &plane, uint8_t &r, uint8_t &g, uint8_t &b)
+{
+  r = static_cast<uint8_t>(std::abs(plane.normal_(0)) * 255.0);
+  g = static_cast<uint8_t>(std::abs(plane.normal_(1)) * 255.0);
+  b = static_cast<uint8_t>(std::abs(plane.normal_(2)) * 255.0);
+}
+
+void VoxelMapManager::GetPlanes(const VoxelOctoTree *current_octo, const int pub_max_voxel_layer, std::vector<VoxelPlane> &plane_list,
+                                bool only_updated)
 {
   if (current_octo->layer_ > pub_max_voxel_layer) { return; }
-  if (current_octo->plane_ptr_->is_update_) { plane_list.push_back(*current_octo->plane_ptr_); }
+  if (only_updated)
+  {
+    // Incremental mode: only planes whose published state changed since the last call,
+    // draining is_update_ as they're collected so a repeat call with no new changes
+    // returns nothing.
+    if (current_octo->plane_ptr_->is_update_)
+    {
+      plane_list.push_back(*current_octo->plane_ptr_);
+      current_octo->plane_ptr_->is_update_ = false;
+    }
+  }
+  else
+  {
+    // Snapshot mode: every currently-fitted plane, regardless of is_update_, with no
+    // mutation -- an idempotent full view of the live map.
+    if (current_octo->plane_ptr_->is_plane_) { plane_list.push_back(*current_octo->plane_ptr_); }
+  }
+  
   if (current_octo->layer_ < current_octo->max_layer_)
   {
     if (!current_octo->plane_ptr_->is_plane_)
     {
       for (size_t i = 0; i < 8; i++)
       {
-        if (current_octo->leaves_[i] != nullptr) { GetUpdatePlane(current_octo->leaves_[i], pub_max_voxel_layer, plane_list); }
+        if (current_octo->leaves_[i] != nullptr) { GetPlanes(current_octo->leaves_[i], pub_max_voxel_layer, plane_list, only_updated); }
       }
     }
   }

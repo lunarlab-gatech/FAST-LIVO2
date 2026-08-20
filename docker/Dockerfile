@@ -55,3 +55,14 @@ RUN echo "export USER=${USERNAME}" >> ~/.bashrc && \
     echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 
 RUN echo "set -g mouse on" >> /home/${USERNAME}/.tmux.conf
+
+# Install the Rerun native viewer (standalone binary, no Python required).
+# Pin this to match the rerun_cpp SDK version fetched by fast_livo's CMakeLists.txt via
+# FetchContent -- the SDK and viewer must be the same version, since Rerun's wire format
+# is not guaranteed stable across releases.
+USER root
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/* && \
+    curl -fL -o /usr/local/bin/rerun \
+    "https://github.com/rerun-io/rerun/releases/download/0.36.1/rerun-cli-0.36.1-x86_64-unknown-linux-gnu" && \
+    chmod +x /usr/local/bin/rerun
+USER ${USERNAME}

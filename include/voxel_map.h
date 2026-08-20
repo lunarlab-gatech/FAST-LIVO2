@@ -14,9 +14,11 @@ which is included as part of this source code package.
 #define VOXEL_MAP_H_
 
 #include "common_lib.h"
+#include "rerun_wrapper.h"
 #include <Eigen/Dense>
 #include <fstream>
 #include <math.h>
+#include <memory>
 #include <mutex>
 #include <omp.h>
 #include <pcl/common/io.h>
@@ -240,19 +242,62 @@ public:
   void build_single_residual(pointWithVar &pv, const VoxelOctoTree *current_octo, const int current_layer, bool &is_sucess, double &prob,
                              PointToPlane &single_ptpl);
 
+  /**
+   * Publishes every currently-fitted plane to both visualization backends:
+   *  - rviz, as a MarkerArray, incrementally (only planes whose state changed since the
+   *    last call, via is_update_ dirty-tracking).
+   *  - the Rerun viewer, as one batched Boxes3D archetype, as a full snapshot every call
+   *    (Rerun's per-path "latest wins" semantics need the complete live set, not just what
+   *    changed, to drop stale planes correctly). A no-op if the Rerun viewer could not be
+   *    reached.
+   */
   void pubVoxelMap();
 
   void mapSliding();
   void clearMemOutOfMap(const int& x_max,const int& x_min,const int& y_max,const int& y_min,const int& z_max,const int& z_min );
 
 private:
-  void GetUpdatePlane(const VoxelOctoTree *current_octo, const int pub_max_voxel_layer, std::vector<VoxelPlane> &plane_list);
+  /**
+   * Collects plane(s) from the subtree rooted at current_octo into plane_list.
+   *
+   * @param only_updated if true, only collects planes whose published state changed since
+   *     the last call (draining is_update_ as they're collected -- the incremental mode
+   *     used by pubVoxelMap()). If false, collects every currently-fitted plane
+   *     (is_plane_ == true) with no mutation -- an idempotent full snapshot, used by
+   *     pubRerunPlanes() since Rerun needs the complete live set on every publish.
+   */
+  void GetPlanes(const VoxelOctoTree *current_octo, const int pub_max_voxel_layer, std::vector<VoxelPlane> &plane_list, bool only_updated);
+
+  /**
+   * Maps a plane's fit uncertainty to an RGB color via a jet colormap.
+   *
+   * @param plane the plane to color.
+   * @param r red channel (uncertainty low->high).
+   * @param g green channel (uncertainty low->high).
+   * @param b blue channel (uncertainty low->high).
+   */
+  void PlaneTraceColor(const VoxelPlane &plane, uint8_t &r, uint8_t &g, uint8_t &b);
+
+  /**
+   * Maps a plane's normal orientation to an RGB color (Rerun path only). Uses |x|,|y|,|z|
+   * so the sign-ambiguous normal (n and -n are the same plane) still gets one color.
+   *
+   * @param plane the plane to color.
+   * @param r red channel (|normal.x|).
+   * @param g green channel (|normal.y|).
+   * @param b blue channel (|normal.z|).
+   */
+  void PlaneNormalColor(const VoxelPlane &plane, uint8_t &r, uint8_t &g, uint8_t &b);
 
   void pubSinglePlane(visualization_msgs::MarkerArray &plane_pub, const std::string plane_ns, const VoxelPlane &single_plane, const float alpha,
                       const Eigen::Vector3d rgb);
   void CalcVectQuation(const Eigen::Vector3d &x_vec, const Eigen::Vector3d &y_vec, const Eigen::Vector3d &z_vec, geometry_msgs::Quaternion &q);
 
   void mapJet(double v, double vmin, double vmax, uint8_t &r, uint8_t &g, uint8_t &b);
+
+  /** Lazily constructed on first use by pubRerunPlanes() so no viewer connection is
+   * attempted unless Rerun output is actually requested. */
+  std::unique_ptr<RerunWrapper> rerun_wrapper_;
 };
 typedef std::shared_ptr<VoxelMapManager> VoxelMapManagerPtr;
 

@@ -101,6 +101,14 @@ find_package(Boost REQUIRED COMPONENTS thread)
 
 set(Sophus_LIBRARIES libSophus.so)
 
+# Fetch the Rerun C++ SDK. Pin this to match the standalone viewer binary installed via
+# docker/Dockerfile and for local dev -- the SDK and viewer must be the same version, since
+# Rerun's wire format is not guaranteed stable across releases.
+include(FetchContent)
+FetchContent_Declare(rerun_sdk URL
+    https://github.com/rerun-io/rerun/releases/download/0.36.1/rerun_cpp_sdk.zip)
+FetchContent_MakeAvailable(rerun_sdk)
+
 # Define the catkin package
 catkin_package(
   CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs message_runtime cv_bridge vikit_common vikit_ros image_transport
@@ -119,10 +127,18 @@ include_directories(
 
 # Add libraries
 add_library(vio src/vio.cpp src/frame.cpp src/visual_point.cpp)
-add_library(lio src/voxel_map.cpp)
+add_library(lio src/voxel_map.cpp src/rerun_wrapper.cpp)
 add_library(pre src/preprocess.cpp)
 add_library(imu_proc src/IMU_Processing.cpp)
 add_library(laser_mapping src/LIVMapper.cpp)
+
+# voxel_map.h transitively includes rerun_wrapper.h/rerun.hpp, so every target that
+# compiles a file pulling it in (directly or via vio.h/LIVMapper.h) needs rerun_sdk's
+# headers to even parse -- only lio (via rerun_wrapper.cpp) actually calls into it at
+# link time, but PUBLIC here also propagates the include dirs to whatever links these.
+target_link_libraries(lio PUBLIC rerun_sdk)
+target_link_libraries(vio PUBLIC rerun_sdk)
+target_link_libraries(laser_mapping PUBLIC rerun_sdk)
 
 # Add the main executable
 add_executable(fastlivo_mapping src/main.cpp)

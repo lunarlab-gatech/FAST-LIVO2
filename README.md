@@ -146,5 +146,5 @@ pip install rospkg
 ### 5.5 Run the experiment
 
 ```bash
-tmuxp load research/tmux/hercules.yaml
+tmuxp load research/Hercules/tmux/hercules.yaml
 ```
