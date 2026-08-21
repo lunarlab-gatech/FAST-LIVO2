@@ -16,8 +16,11 @@ which is included as part of this source code package.
 #include "IMU_Processing.h"
 #include "vio.h"
 #include "preprocess.h"
+#include "rerun_wrapper.h"
+#include <array>
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
+#include <memory>
 #include <nav_msgs/Path.h>
 #include <vikit/camera_loader.h>
 
@@ -49,6 +52,7 @@ public:
   void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_in);
   void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in);
   void img_cbk(const sensor_msgs::ImageConstPtr &msg_in);
+  void gt_odom_cbk(const nav_msgs::Path::ConstPtr &msg);
   void publish_img_rgb(const image_transport::Publisher &pubImage, VIOManagerPtr vio_manager);
   void publish_frame_world(const ros::Publisher &pubLaserCloudFullRes, VIOManagerPtr vio_manager);
   void publish_visual_sub_map(const ros::Publisher &pubSubVisualMap);
@@ -62,6 +66,12 @@ public:
   template <typename T> Eigen::Matrix<T, 3, 1> pointBodyToWorld(const Eigen::Matrix<T, 3, 1> &pi);
   cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg);
 
+  /**
+   * Lazy accessor for this node's Rerun connection -- constructs on first call only, so no
+   * viewer connection is attempted unless Rerun output is actually requested.
+   */
+  RerunWrapper *GetRerunWrapper();
+
   std::mutex mtx_buffer, mtx_buffer_imu_prop;
   std::condition_variable sig_buffer;
 
@@ -69,7 +79,11 @@ public:
   std::unordered_map<VOXEL_LOCATION, VoxelOctoTree *> voxel_map;
   
   string root_dir;
-  string lid_topic, imu_topic, seq_name, img_topic;
+  string lid_topic, imu_topic, seq_name, img_topic, gt_odom_topic;
+  /** Directory evoFile (seq_name + ".txt") is written into; defaults to ROOT_DIR's
+   * Log/result/, overridable via evo/result_dir (e.g. to write straight into a dataset's
+   * results folder instead of copying it there by hand afterward). */
+  string result_dir;
   V3D extT;
   M3D extR;
 
@@ -105,6 +119,7 @@ public:
 
   bool lidar_pushed = false, imu_en, gravity_est_en, flg_reset = false, ba_bg_est_en = true;
   bool dense_map_en = false;
+  bool rerun_en_ = false;
   int img_en = 1, imu_int_frame = 3;
   bool normal_en = true;
   bool exposure_estimate_en = false;
@@ -150,6 +165,16 @@ public:
   StatesGroup  state_propagat;
 
   nav_msgs::Path path;
+
+  /** Full GT trajectory as last received on gt_odom_topic (see gt_odom_cbk). */
+  std::vector<std::array<double, 3>> gt_trajectory_;
+  /** How many leading points of gt_trajectory_ have already been forwarded to Rerun -- the
+   * publish call site only sends the unsent tail each step. */
+  size_t gt_points_sent_ = 0;
+  /** Set by gt_odom_cbk when gt_trajectory_ was rebuilt from scratch (the incoming path
+   * shrank) rather than purely extended; tells Rerun to drop its own cached history too. */
+  bool gt_trajectory_reset_pending_ = false;
+
   nav_msgs::Odometry odomAftMapped;
   geometry_msgs::Quaternion geoQuat;
   geometry_msgs::PoseStamped msg_body_pose;
@@ -164,6 +189,7 @@ public:
   ros::Subscriber sub_pcl;
   ros::Subscriber sub_imu;
   ros::Subscriber sub_img;
+  ros::Subscriber sub_gt_odom_;
   ros::Publisher pubLaserCloudFullRes;
   ros::Publisher pubNormal;
   ros::Publisher pubSubVisualMap;
@@ -183,5 +209,8 @@ public:
   double aver_time_icp = 0;
   double aver_time_map_inre = 0;
   bool colmap_output_en = false;
+
+  /** Constructed lazily by GetRerunWrapper(). */
+  std::unique_ptr<RerunWrapper> rerun_wrapper_;
 };
 #endif

@@ -1,11 +1,13 @@
 <launch>
 <!-- Launch file for Hercules dataset -->
 
-	<arg name="rviz" default="true" />
+	<arg name="rviz" default="false" />
 	<arg name="dataset_num" />
 	<arg name="robot_type" />
+	<arg name="robot_name" />
 
 	<rosparam command="load" file="$(find fast_livo)/config/Hercules/$(arg dataset_num)/$(arg robot_type).yaml" />
+	<!--<param name="evo/result_dir" value="$(env HOME)/data/Hercules_datasets/$(arg dataset_num)/results/FAST-LIVO2/$(arg robot_name)/" />-->
 
 	<node pkg="fast_livo" type="fastlivo_mapping" name="laserMapping" output="screen">
 		<rosparam file="$(find fast_livo)/config/Hercules/$(arg dataset_num)/camera_pinhole.yaml" />

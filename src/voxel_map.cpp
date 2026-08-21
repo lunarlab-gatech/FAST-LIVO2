@@ -785,8 +785,13 @@ void VoxelMapManager::build_single_residual(pointWithVar &pv, const VoxelOctoTre
   }
 }
 
-void VoxelMapManager::pubVoxelMap()
+void VoxelMapManager::pubVoxelMap(RerunWrapper &rerun)
 {
+  // Throttle: the full voxel_map_ traversal below is expensive and grows with map size.
+  ros::Time now = ros::Time::now();
+  if ((now - last_rerun_pub_time_).toSec() < 1.0) { return; }
+  last_rerun_pub_time_ = now;
+
   float use_alpha = 0.8;
 
   // TEMPORARILY DISABLED: RViz plane markers are redundant now that Rerun handles plane
@@ -818,8 +823,6 @@ void VoxelMapManager::pubVoxelMap()
 
   // Rerun: full live snapshot every call -- its per-path "latest wins" semantics need the
   // complete current set (not just what changed) to drop stale planes correctly.
-  if (!rerun_wrapper_) { rerun_wrapper_ = std::make_unique<RerunWrapper>("fast_livo2"); }
-
   std::vector<VoxelPlane> rerun_plane_list;
   for (auto iter = voxel_map_.begin(); iter != voxel_map_.end(); iter++)
   {
@@ -854,7 +857,7 @@ void VoxelMapManager::pubVoxelMap()
     boxes.push_back(box);
   }
 
-  rerun_wrapper_->publishBoxes("planes", boxes);
+  rerun.publishBoxes("planes", boxes);
 }
 
 void VoxelMapManager::PlaneTraceColor(const VoxelPlane &plane, uint8_t &r, uint8_t &g, uint8_t &b)

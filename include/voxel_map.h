@@ -246,12 +246,20 @@ public:
    * Publishes every currently-fitted plane to both visualization backends:
    *  - rviz, as a MarkerArray, incrementally (only planes whose state changed since the
    *    last call, via is_update_ dirty-tracking).
-   *  - the Rerun viewer, as one batched Boxes3D archetype, as a full snapshot every call
-   *    (Rerun's per-path "latest wins" semantics need the complete live set, not just what
-   *    changed, to drop stale planes correctly). A no-op if the Rerun viewer could not be
-   *    reached.
+   *  - the Rerun viewer, as one Boxes3D batch per root voxel (matching voxel_map_'s own
+   *    VOXEL_LOCATION chunking). A root's batch is only rebuilt and re-logged when
+   *    something in its subtree changed since the last call (via is_update_
+   *    dirty-tracking, same mechanism as the rviz path); untouched roots are left alone, so
+   *    Rerun keeps showing their last-logged state. This keeps per-tick cost proportional
+   *    to how much of the map is actively changing rather than to the total accumulated
+   *    map size. Roots deleted outright by clearMemOutOfMap() never touch is_update_, so
+   *    they're cleared separately via pending_rerun_root_clears_.
+   *
+   * Throttled to 1 Hz.
+   *
+   * @param rerun the Rerun connection to publish to, owned by the caller.
    */
-  void pubVoxelMap();
+  void pubVoxelMap(RerunWrapper &rerun);
 
   void mapSliding();
   void clearMemOutOfMap(const int& x_max,const int& x_min,const int& y_max,const int& y_min,const int& z_max,const int& z_min );
@@ -295,9 +303,9 @@ private:
 
   void mapJet(double v, double vmin, double vmax, uint8_t &r, uint8_t &g, uint8_t &b);
 
-  /** Lazily constructed on first use by pubRerunPlanes() so no viewer connection is
-   * attempted unless Rerun output is actually requested. */
-  std::unique_ptr<RerunWrapper> rerun_wrapper_;
+  /** Gate for the 1 Hz throttle in pubVoxelMap() -- default-zero-initialized so the first
+   * call always publishes. */
+  ros::Time last_rerun_pub_time_;
 };
 typedef std::shared_ptr<VoxelMapManager> VoxelMapManagerPtr;
 

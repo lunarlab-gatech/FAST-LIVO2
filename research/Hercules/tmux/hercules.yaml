@@ -4,7 +4,7 @@ environment:
   ROS_DIR: '/opt/ros/noetic'
   ROS_WS: '/home/dbutterfield3/fast_livo2_ws'
   DATASET_NUM: 'V2.4.F'
-  ROBOT_NAME: 'Husky1'
+  ROBOT_NAME: 'Husky2'
   ROBOT_TYPE: 'Husky'
 options:
   default-command: /bin/bash
@@ -23,7 +23,7 @@ windows:
     - source $ROS_DIR/setup.bash
     - source $ROS_WS/devel/setup.bash
     - sleep 3
-    - roslaunch fast_livo mapping_hercules.launch dataset_num:=${DATASET_NUM} robot_type:=${ROBOT_TYPE}
+    - roslaunch fast_livo mapping_hercules.launch dataset_num:=${DATASET_NUM} robot_type:=${ROBOT_TYPE} robot_name:=${ROBOT_NAME}
 
 - window_name: roscore
   panes:

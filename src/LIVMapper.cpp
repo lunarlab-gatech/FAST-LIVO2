@@ -11,6 +11,7 @@ which is included as part of this source code package.
 */
 
 #include "LIVMapper.h"
+#include <filesystem>
 
 LIVMapper::LIVMapper(ros::NodeHandle &nh)
     : extT(0, 0, 0),
@@ -47,6 +48,12 @@ LIVMapper::LIVMapper(ros::NodeHandle &nh)
 
 LIVMapper::~LIVMapper() {}
 
+RerunWrapper *LIVMapper::GetRerunWrapper()
+{
+  if (!rerun_wrapper_) { rerun_wrapper_ = std::make_unique<RerunWrapper>("fast_livo2"); }
+  return rerun_wrapper_.get();
+}
+
 void LIVMapper::readParameters(ros::NodeHandle &nh)
 {
   nh.param<string>("common/lid_topic", lid_topic, "/livox/lidar");
@@ -78,6 +85,8 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
 
   nh.param<string>("evo/seq_name", seq_name, "01");
   nh.param<bool>("evo/pose_output_en", pose_output_en, false);
+  nh.param<string>("evo/gt_odom_topic", gt_odom_topic, "/odom/gt");
+  nh.param<string>("evo/result_dir", result_dir, std::string(ROOT_DIR) + "Log/result/");
   nh.param<double>("imu/gyr_cov", gyr_cov, 1.0);
   nh.param<double>("imu/acc_cov", acc_cov, 1.0);
   nh.param<int>("imu/imu_int_frame", imu_int_frame, 3);
@@ -113,6 +122,7 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
   nh.param<int>("publish/pub_scan_num", pub_scan_num, 1);
   nh.param<bool>("publish/pub_effect_point_en", pub_effect_point_en, false);
   nh.param<bool>("publish/dense_map_en", dense_map_en, false);
+  nh.param<bool>("publish/rerun_en", rerun_en_, false);
 
   p_pre->blind_sqr = p_pre->blind * p_pre->blind;
 }
@@ -197,6 +207,10 @@ void LIVMapper::initializeSubscribersAndPublishers(ros::NodeHandle &nh, image_tr
             nh.subscribe(lid_topic, 200000, &LIVMapper::standard_pcl_cbk, this);
   sub_imu = nh.subscribe(imu_topic, 200000, &LIVMapper::imu_cbk, this);
   sub_img = nh.subscribe(img_topic, 200000, &LIVMapper::img_cbk, this);
+  // Queue depth 1: each message is the full accumulated path, so gt_odom_cbk can catch up
+  // to whatever the newest message holds regardless of how many were skipped in between --
+  // no need to queue up ones we'd only be appending from in order anyway.
+  sub_gt_odom_ = nh.subscribe(gt_odom_topic, 1, &LIVMapper::gt_odom_cbk, this);
   
   pubLaserCloudFullRes = nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered", 100);
   pubNormal = nh.advertise<visualization_msgs::MarkerArray>("visualization_marker", 100);
@@ -387,15 +401,16 @@ void LIVMapper::handleLIO()
     static bool pos_opend = false;
     static int ocount = 0;
     std::ofstream outFile, evoFile;
-    if (!pos_opend) 
+    if (!pos_opend)
     {
-      evoFile.open(std::string(ROOT_DIR) + "Log/result/" + seq_name + ".txt", std::ios::out);
+      std::filesystem::create_directories(result_dir); // result_dir may not exist yet (e.g. a new robot's results folder)
+      evoFile.open(result_dir + seq_name + ".txt", std::ios::out);
       pos_opend = true;
       if (!evoFile.is_open()) ROS_ERROR("open fail\n");
-    } 
-    else 
+    }
+    else
     {
-      evoFile.open(std::string(ROOT_DIR) + "Log/result/" + seq_name + ".txt", std::ios::app);
+      evoFile.open(result_dir + seq_name + ".txt", std::ios::app);
       if (!evoFile.is_open()) ROS_ERROR("open fail\n");
     }
     Eigen::Matrix4d outT;
@@ -445,8 +460,24 @@ void LIVMapper::handleLIO()
 
   publish_frame_world(pubLaserCloudFullRes, vio_manager);
   if (pub_effect_point_en) publish_effect_world(pubLaserCloudEffect, voxelmap_manager->ptpl_list_);
-  if (voxelmap_manager->config_setting_.is_pub_plane_map_) voxelmap_manager->pubVoxelMap();
-  publish_path(pubPath);
+  // publish_path(pubPath); // disabled: trajectory/est in Rerun covers this now
+  if (rerun_en_)
+  {
+    RerunWrapper *rerun = GetRerunWrapper();
+    if (voxelmap_manager->config_setting_.is_pub_plane_map_) { voxelmap_manager->pubVoxelMap(*rerun); }
+
+    rerun->appendAndPublishTrajectoryPoints(
+        "trajectory/est", {{_state.pos_end[0], _state.pos_end[1], _state.pos_end[2]}}, 255, 165, 0, 255 // orange
+    );
+
+    if (gt_points_sent_ < gt_trajectory_.size())
+    {
+      std::vector<std::array<double, 3>> new_gt_points(gt_trajectory_.begin() + gt_points_sent_, gt_trajectory_.end());
+      rerun->appendAndPublishTrajectoryPoints("trajectory/gt", new_gt_points, 0, 255, 0, 255, gt_trajectory_reset_pending_); // green
+      gt_points_sent_ = gt_trajectory_.size();
+      gt_trajectory_reset_pending_ = false;
+    }
+  }
   publish_mavros(mavros_pose_publisher);
 
   frame_num++;
@@ -882,6 +913,27 @@ void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
   sig_buffer.notify_all();
 }
 
+void LIVMapper::gt_odom_cbk(const nav_msgs::Path::ConstPtr &msg)
+{
+  // msg->poses is already the full accumulated/sub-sampled GT trajectory, in the same
+  // camera_init/NED frame as everything else. Normally each new message is just the
+  // previous one plus new points at the tail, so only append what's new -- O(new points),
+  // not O(total length). If it ever comes back shorter (the GT source restarted), rebuild
+  // from scratch and flag the Rerun side to drop its own cached history too.
+  if (msg->poses.size() < gt_trajectory_.size())
+  {
+    gt_trajectory_.clear();
+    gt_points_sent_ = 0;
+    gt_trajectory_reset_pending_ = true;
+  }
+
+  for (size_t i = gt_trajectory_.size(); i < msg->poses.size(); i++)
+  {
+    const auto &p = msg->poses[i].pose.position;
+    gt_trajectory_.push_back({p.x, p.y, p.z});
+  }
+}
+
 bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
 {
   if (lid_raw_data_buffer.empty() && lidar_en) return false;
@@ -1127,7 +1179,9 @@ void LIVMapper::publish_img_rgb(const image_transport::Publisher &pubImage, VIOM
   // out_msg.header.frame_id = "camera_init";
   out_msg.encoding = sensor_msgs::image_encodings::BGR8;
   out_msg.image = img_rgb;
-  pubImage.publish(out_msg.toImageMsg());
+  // pubImage.publish(out_msg.toImageMsg()); // disabled: camera/rgb in Rerun covers this now
+
+  if (rerun_en_) { GetRerunWrapper()->publishImage("camera/rgb", img_rgb); }
 }
 
 // Provide output format for LiDAR-visual BA
@@ -1187,7 +1241,20 @@ void LIVMapper::publish_frame_world(const ros::Publisher &pubLaserCloudFullRes, 
   }
   laserCloudmsg.header.stamp = ros::Time::now(); //.fromSec(last_timestamp_lidar);
   laserCloudmsg.header.frame_id = "camera_init";
-  pubLaserCloudFullRes.publish(laserCloudmsg);
+  // pubLaserCloudFullRes.publish(laserCloudmsg); Comment out as we only publish to Rerun now
+
+  if (rerun_en_)
+  {
+    // Same points as laserCloudmsg above -- current frame only, no accumulation.
+    if (slam_mode_ == LIVO && LidarMeasures.lio_vio_flg == VIO)
+    {
+      GetRerunWrapper()->publishPoints("cloud_registered", *laserCloudWorldRGB, 255, 255, 255);
+    }
+    else if (slam_mode_ == ONLY_LIO || slam_mode_ == ONLY_LO)
+    {
+      GetRerunWrapper()->publishPoints("cloud_registered", *pcl_w_wait_pub, 255, 255, 255);
+    }
+  }
 
   /**************** save map ****************/
   /* 1. make sure you have enough memories
