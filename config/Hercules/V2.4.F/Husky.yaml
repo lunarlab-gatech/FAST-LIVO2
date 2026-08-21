@@ -72,7 +72,7 @@ uav:
 publish:
   dense_map_en: false # Can enable
   pub_effect_point_en: false
-  pub_plane_en: true
+  pub_plane_en: false
   pub_scan_num: 5 # Can drop to 1
   blind_rgb_points: 0.0
   rerun_en: true

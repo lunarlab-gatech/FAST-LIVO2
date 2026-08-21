@@ -4,8 +4,8 @@ environment:
   ROS_DIR: '/opt/ros/noetic'
   ROS_WS: '/home/dbutterfield3/fast_livo2_ws'
   DATASET_NUM: 'V2.4.F'
-  ROBOT_NAME: 'Husky2'
-  ROBOT_TYPE: 'Husky'
+  ROBOT_NAME: 'Drone1'
+  ROBOT_TYPE: 'Drone'
 options:
   default-command: /bin/bash
 

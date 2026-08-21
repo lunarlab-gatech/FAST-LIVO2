@@ -246,16 +246,12 @@ public:
    * Publishes every currently-fitted plane to both visualization backends:
    *  - rviz, as a MarkerArray, incrementally (only planes whose state changed since the
    *    last call, via is_update_ dirty-tracking).
-   *  - the Rerun viewer, as one Boxes3D batch per root voxel (matching voxel_map_'s own
-   *    VOXEL_LOCATION chunking). A root's batch is only rebuilt and re-logged when
-   *    something in its subtree changed since the last call (via is_update_
-   *    dirty-tracking, same mechanism as the rviz path); untouched roots are left alone, so
-   *    Rerun keeps showing their last-logged state. This keeps per-tick cost proportional
-   *    to how much of the map is actively changing rather than to the total accumulated
-   *    map size. Roots deleted outright by clearMemOutOfMap() never touch is_update_, so
-   *    they're cleared separately via pending_rerun_root_clears_.
+   *  - the Rerun viewer, as one batched Boxes3D archetype, as a full snapshot every call
+   *    (Rerun's per-path "latest wins" semantics need the complete live set, not just what
+   *    changed, to drop stale planes correctly).
    *
-   * Throttled to 1 Hz.
+   * Throttled to 1 Hz -- the full voxel_map_ traversal needed for the Rerun snapshot is
+   * expensive and grows with map size, so calls faster than that are dropped.
    *
    * @param rerun the Rerun connection to publish to, owned by the caller.
    */
